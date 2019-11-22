@@ -38,42 +38,31 @@ def main():
 		#determine speed and direction from x_center
 		
 		while(1):
-			try:
-				x_center = main_xcenter_conn.recv()		
-			except:
-				x_center = dead_center+1		
-				print("Error in main. Failed to retrieve xccenter, default xcenter used")	
-			
-			send_to_arduino(x_center)
+			#try:
+			x_center = main_xcenter_conn.recv()		
+			#except:
+			#	x_center = dead_center+1		
+			#	print("Error in main. Failed to retrieve xccenter, default xcenter used")	
+			if(x_center<1280 and x_center>0):
+				#data = (x_center).to_bytes(2, byteorder='little')
+				send_to_arduino(int(x_center))
+			else:
+				print("xcenter out of range")	
 			print("xcenter: {:.8f}".format(x_center))
 		
-#			if(x_center> dead_center):
-#				direction = 1
-#			else:
-#				direction = 0
-#			try:
-#				period = 0.001/math.fabs(dead_center - x_center) #TODO:modify this equation
-#			except ZeroDivisionError:
-#				period = 0.0001
-#				print("ZeroDivisionError, used deafult period=0.0001")
-#			except:
-#				print("error in main")
-#
-#			main_period_conn.send(period)
-#			main_direction_conn.send(direction)
-#			print("period, direction: {:.8f}, {:d}".format(period, direction))
+
 					
 
 	finally:
 		print("------------------EXITING-------------------")
 		process_detection.join()
 		#process_tracking.join()
-		GPIO.cleanup()	
+		#GPIO.cleanup()	
 
 
 
 def object_detection(x_center_conn):
-	net = jetson.inference.detectNet("ssd-mobilenet-v2", threshold=0.6)
+	net = jetson.inference.detectNet("ssd-mobilenet-v2", threshold=0.4)
 	camera = jetson.utils.gstCamera(display_size[0], display_size[1], "/dev/video0")
 	display = jetson.utils.glDisplay()
 	
@@ -88,53 +77,19 @@ def object_detection(x_center_conn):
 			print("NO OBJECT DETECTED")
 		else:
 			d_max = detections[0]
-			#for d in detections:
-			#	if(d.Confidence>d_max.Confidence):
-			#		d_max = d
+			for d in detections:
+				if(d.Confidence>d_max.Confidence):
+					d_max = d
 
 			x_center_conn.send(int(math.floor(d_max.Center[0])))
 			#print("xcenter: {:.8f}".format(d_max.Center[0]))
-			net.PrintProfilerTimes();
+			#net.PrintProfilerTimes();
+			display.SetTitle("Average frame time (ms): {:.2f}".format(display.GetFPS()))
 
-def motor_tracking(track_period_conn, track_direction_conn): #TODO: delay between pulses too large - possibly due to processor
-	"""Will run in a seperate thread to move the motor according to the period and direction specified by the pipes connected to main"""
-	
-	#setup gpio
-	direction_pin = 17 # BOARD11, BCM17
-	output_pin = 18  # BOARD pin 12, BCM pin 18
-	GPIO.setmode(GPIO.BCM)
-	GPIO.setup(output_pin, GPIO.OUT, initial=GPIO.HIGH)
-	GPIO.setup(direction_pin, GPIO.OUT, initial=GPIO.HIGH)
 
-	state = GPIO.HIGH
-	
-	#start tracking
-	
-	period = 0.0002
-	direction = 0
-
-	
-	while(1):
-		
-		print("started: {:.6f}".format(time.time()))
-		try:
-			period = track_period_conn.recv()
-			direction = track_direction_conn.recv()
-		except:
-			print("Error in tracking. Falied to receive period or direction")			
-	
-		#print("period: {:.8f}".format(period))
-		
-
-		GPIO.output(output_pin, state)
-		GPIO.output(direction_pin, direction)
-		state = not state
-		time.sleep(period)
-		#state = not state
-		#time.sleep(period/2)
 
 def send_to_arduino(xcenter):
-    data = struct.pack('<i', xcenter)
+    data = struct.pack('<I', xcenter)
     arduino.write(data)
 
 
