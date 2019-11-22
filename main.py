@@ -6,10 +6,12 @@ import Jetson.GPIO as GPIO
 import time
 from multiprocessing import Process, Pipe
 import math
+import serial
+import struct
 
 global display_size
-global x_center
-
+#global x_center
+arduino = serial.Serial("/dev/ttyUSB0", baudrate=115200, timeout=0.05)
 
 def main():
 	global display_size 	#assuming 1280x720 display
@@ -26,8 +28,7 @@ def main():
 		#main_direction_conn, track_direction_conn = Pipe()	#direction updated in main thread and used in tracking thread
 
 		process_detection = Process(target=object_detection, args=(detect_xcenter_conn,))	
-		#process_tracking = Process(target=motor_tracking, args=(track_period_conn, track_direction_conn,))
-		#process_calculating = Process(target=calculate, args=(main_xcenter_conn, main_direction_conn, main_period_conn,))		
+		#process_tracking = Process(target=motor_tracking, args=(track_period_conn, track_direction_conn,))	
 
 		process_detection.start()
 		time.sleep(15)
@@ -35,16 +36,16 @@ def main():
 		#process_tracking.start()
 		
 		#determine speed and direction from x_center
+		
 		while(1):
-			arduino = serial.Serial("/dev/ttyUSB0", baudrate=115200, timeout=0.05)
-			
 			try:
 				x_center = main_xcenter_conn.recv()		
 			except:
-				x_center = dead_center+0.0001		
+				x_center = dead_center+1		
 				print("Error in main. Failed to retrieve xccenter, default xcenter used")	
 			
 			send_to_arduino(x_center)
+			print("xcenter: {:.8f}".format(x_center))
 		
 #			if(x_center> dead_center):
 #				direction = 1
@@ -91,8 +92,9 @@ def object_detection(x_center_conn):
 			#	if(d.Confidence>d_max.Confidence):
 			#		d_max = d
 
-			x_center_conn.send(d_max.Center[0])
-			print("xcenter: {:.8f}".format(d_max.Center[0]))
+			x_center_conn.send(int(math.floor(d_max.Center[0])))
+			#print("xcenter: {:.8f}".format(d_max.Center[0]))
+			net.PrintProfilerTimes();
 
 def motor_tracking(track_period_conn, track_direction_conn): #TODO: delay between pulses too large - possibly due to processor
 	"""Will run in a seperate thread to move the motor according to the period and direction specified by the pipes connected to main"""

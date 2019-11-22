@@ -4,15 +4,15 @@ int xcenter;
 int dir;
 float period;
 int state;
-int STEP_PIN;
-int DIR_PIN;
+const int STEP_PIN = 12;
+const int DIR_PIN = 11;
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
   pinMode(STEP_PIN, OUTPUT);
   pinMode(DIR_PIN, OUTPUT);
-  period = 10;
+  period = 1;
   state = 1;
   dir = 0;
   Serial.print("Ready");
@@ -44,7 +44,7 @@ void loop() {
         period=1; 
       }
       else{
-        period = 10/fabs(xcenter-640);  
+        period = 500.0/fabs(xcenter-640);  
       }
       
     }
@@ -52,6 +52,8 @@ void loop() {
     digitalWrite(DIR_PIN, dir);
     digitalWrite(STEP_PIN, state);
     delay(period);
-    Serial.write((int)round(period));
+    state = !state;
+    Serial.print(xcenter+" ");
+    Serial.println((state));
   }
 }
