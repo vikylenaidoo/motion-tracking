@@ -9,7 +9,7 @@
 #include <TimerOne.h>
 unsigned int xcenter;
 int dir;
-float current_angle;
+short steps;
 unsigned long period;
 const int STEP_PIN = 10;
 const int DIR_PIN = 11;
@@ -21,43 +21,40 @@ void setup() {
   pinMode(STEP_PIN, OUTPUT);
   pinMode(DIR_PIN, OUTPUT);
   
-  period = 50000;
+  period = 500000; //500000;
   dir = 1;
   xcenter = width/2;
   digitalWrite(DIR_PIN, dir);
   
   Timer1.initialize(period);
-  Timer1.attachInterrupt(updateCurrentAngle);
+  //Timer1.attachInterrupt(updateCurrentAngle);
   Timer1.pwm(STEP_PIN, 0.5*1023);
-  
+
+  while(Serial.available()>0){ //to clear the buffer
+    Serial.read();
+  }
   Serial.print("Ready");
 }
 
 int readIntFromBytes() {
   union u_tag {
-    byte b[4];
+    byte b[2];
     int ival;
   } u;
 
-  u.b[0] = Serial.read();
-  u.b[1] = Serial.read();
-  u.b[2] = Serial.read();
-  u.b[3] = Serial.read();
-  /*
-  Serial.println(u.b[0]);
-  Serial.println(u.b[0]);
-  Serial.println(u.b[0]);
-  Serial.println(u.b[0]);
-  Serial.println("end of read");*/
+  for(int i=0; i<2; i++){
+    u.b[i] = Serial.read();
+  }
+
   return u.ival;
 }
 
-void updateCurrentAngle(){
+void updateCurrentAngle(){ //used as a handler on rising edge of timer to update the steps
     if(dir==1){
-      current_angle++;  
+      steps++;  
     }
     else{
-      current_angle--; 
+      steps--; 
     }
 }
 
@@ -67,15 +64,9 @@ void calibrateAngle(){
 
 void loop() {
   while (1) {
-    if(Serial.available() > 4){
+    if(Serial.available() > 2){
       xcenter = readIntFromBytes();
       int deadcenter = width/2;
-      if(xcenter>width | xcenter<0){ //out of bounds
-        //Serial.print("xcenter out of bounds");
-        //Serial.println(xcenter);
-        //delay(10000);
-       xcenter = deadcenter;  
-      }
 
       //set direction
       if(xcenter>deadcenter){
@@ -87,38 +78,36 @@ void loop() {
 
       //set period
       if(xcenter==deadcenter){
-        period=100000; 
+        period=100000; //100000; 
       }
       else{
-        period = 16000/abs(xcenter-deadcenter);  
+        period = 160000/abs(xcenter-deadcenter);  
       }
-      if(period<3500){
-        period = 3500;
+      if(period<20000){
+        period = 20000;
       }
       
-      /*Serial.print("xcenter: ");
+      Serial.print("xcenter: ");
       Serial.println(xcenter);
       Serial.print("period: ");
       Serial.println(period);
       Serial.println(dir);
-      */
+      
       Timer1.setPeriod(period);
       digitalWrite(DIR_PIN, dir);
-      
+      //delay(100);
       
     }
     else{
-      /*if(period<100000){
-        period = period+100;
-      }*/
-      //period = 64000;
-      //Serial.print(xcenter);
-      //Serial.println(" no comm");
-     
+      
+      
+      
     }
-    
-    //delay(5)
-    Serial.println(current_angle);
-    
+    /*Serial.write(highByte(steps));
+    Serial.write(lowByte(steps));
+    //delay(200);
+    Serial.print("steps: ");
+    Serial.println(steps);
+    */
   }
 }
