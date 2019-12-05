@@ -7,7 +7,7 @@ import time
 from multiprocessing import Process, Pipe
 import math
 import serial
-#import struct
+import os
 
 
 
@@ -78,25 +78,26 @@ def main():
 def object_detection(x_center_conn):
 	net = jetson.inference.detectNet("ssd-mobilenet-v2", threshold=0.4) #ssd-mobilenet-v2
 	camera = jetson.utils.gstCamera(display_size[0], display_size[1], "/dev/video0") #/dev/video0
-	display = jetson.utils.glDisplay()
+#	display = jetson.utils.glDisplay()
 
 	last_time = time.time()
 	try:
-		while (display.IsOpen()):
+		while(1): #(display.IsOpen()):
 			now = time.time()
-			#print("[Detection] length of detections = ", (now-last_time))
+			print("[Detection] detections fps = ", 1/(now-last_time))
 			last_time = now
 			
 			img, width, height = camera.CaptureRGBA()		
 
 			#run the detection
 			detections = net.Detect(img, width, height)
-			display.RenderOnce(img, width, height)	
+			
+#			display.RenderOnce(img, width, height)	
 			
 			#max confidence object
 			if(len(detections)==0):
 				print("NO OBJECT DETECTED")
-				display.SetTitle("No Object Detected")
+#				display.SetTitle("No Object Detected")
 			else:
 				d_max = detections[0]
 				for d in detections:
@@ -105,14 +106,14 @@ def object_detection(x_center_conn):
 				if(net.GetClassDesc(d_max.ClassID)!="person"):
 					d_max = None
 					print("NO OBJECT DETECTED")
-					display.SetTitle("No Object Detected")
+#					display.SetTitle("No Object Detected")
 				else:
 					xcenter = int(math.floor(d_max.Center[0]))
 					x_center_conn.send(xcenter)
 					#print(d_max)
 					#net.PrintProfilerTimes();
-					fps = 1000/net.GetNetworkTime()
-					display.SetTitle("FPS: {:.2f} \t Class: {:s} \t Confidence: {:.2f} \t xcenter: {:d}".format(fps, net.GetClassDesc	(d_max.ClassID), d_max.Confidence, xcenter))
+#					fps = 1000/net.GetNetworkTime()
+#					display.SetTitle("FPS: {:.2f} \t Class: {:s} \t Confidence: {:.2f} \t xcenter: {:d}".format(fps, net.GetClassDesc	(d_max.ClassID), d_max.Confidence, xcenter))
 	except KeyboardInterrupt:
 		print("-------------------keyboard interrupt detection -------------")		
 
@@ -122,27 +123,40 @@ def receive_angle():
 	angle_data = []
 	angle_timestamps = []
 	t0 = time.time()
-
+	#angle_timestamps.append(0)
+	os.nice(-12)
+	
 	try:
 		while(1):		
 			if(arduino.in_waiting > 2):
 				angle_data.append(read_angle_from_arduino())
 				t1 = time.time()
-				angle_timestamps.append(t1-t0)
-				t0 = t1
-				print("[angle]\t received angle = ", angle_data[-1], "\tat: ", angle_timestamps[-1])	
+				angle_timestamps.append((t1-t0))
+				
+				#print("[angle]\t received angle = ", angle_data[-1], "\tat: ", 1/(angle_timestamps[-1]-angle_timestamps[-2]))	
 			else:
 				angle_data.append(angle_data[-1])
+				delay(0.00005)
 				t1 = time.time()
 				angle_timestamps.append(t1-t0)
-				t0 = t1
-				print("[angle]\t received angle = ", angle_data[-1], "\tat: ", angle_timestamps[-1])	
-			time.sleep(0.01076)
+				
+				#print("[angle]\t received angle = ", angle_data[-1], "\tat: ", 1/(angle_timestamps[-1]-angle_timestamps[-2]))	
+			#time.sleep(0.010756)
+			delay(0.010892)
 	
 	except KeyboardInterrupt:
 		print("-------------------keyboard interrupt angle -------------")		
-		print("angles = ", angle_data)		
-		print("times = ", angle_timestamps)
+		print("angles = ", angle_data)
+		t0 = 0		
+		for t in angle_timestamps:
+			print("fps = ", 1/(t-t0))
+			t0 = t 
+		#print("times = ", angle_timestamps)
+
+def delay(secs):
+	start = time.perf_counter()
+	while(time.perf_counter()<start+secs):
+		pass
 
 def send_to_arduino(xcenter):
 	data = xcenter.to_bytes(2, byteorder='big', signed=False) #struct.pack('<I', xcenter)

@@ -7,14 +7,16 @@
 
 #include <math.h>
 
+/*--------------------------------------- globla variables --------------------------------*/
 const int ZERO_PIN = 2;
 const int STEP_PIN = 10;
 const int DIR_PIN = 11;
+
 const int width = 320;
 
-const float a = 0.03; //0.03
+const float a = 0.3; //0.03
 const float b = 0.005;
-const float c = 0.2; //0.2
+const float c = 0.05; //0.2
 
 volatile bool isCalibrated;
 int state;
@@ -25,6 +27,8 @@ float period;
 float target_angle;
 unsigned long t0;
 
+
+/*--------------------------------------- setup -----------------------------------------*/
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
@@ -51,6 +55,8 @@ void setup() {
   Serial.print("Ready");
 }
 
+
+/*--------------------------- function definitions ---------------------------*/
 int readIntFromBytes() {
   union u_tag {
     byte b[2];
@@ -77,6 +83,7 @@ void updateCurrentAngle(){ //used as a handler on rising edge of timer to update
 
 void calibrateAngle(){
   dir = 1;
+  isCalibrated = 0;
   digitalWrite(DIR_PIN, dir);
   while(!isCalibrated){
     state = !state;
@@ -93,6 +100,9 @@ void zeroButton(){
   }
 }
 
+
+
+/*-----------------------------------main loop ------------------------------------*/
 void loop() {
   while (1) {
     float current_angle = 0.15*steps;
@@ -131,14 +141,14 @@ void loop() {
     
     float error = abs(target_angle-current_angle);
     if(error<0.15){
-      period = 50;  
+      period = 50000;  
     }
     else{
-      if(error>20){
-        period = 1;    
+      if(error>30){
+        period = 150;    
       }
       else{
-        period = 1.0/(a*error);
+        period = 1000.0/(a*error);
       }
     }
     
@@ -153,11 +163,16 @@ void loop() {
     digitalWrite(DIR_PIN, dir);
     state = !state;
     updateCurrentAngle();
-    delay(period);
 
+    if(period<1000){
+      delayMicroseconds(period);
+    }
+    else{
+      delay(period/1000)  ;
+    }
     unsigned long now = millis();
 
-    if(Serial.availableForWrite()>2 && (now-t0)>11.1){ //wait until 90Hz (11.1ms) to send
+    if(Serial.availableForWrite()>2 && (now-t0)>11){ //wait until 90Hz (11.1ms) to send
       Serial.write(highByte(steps));
       Serial.write(lowByte(steps));
       t0 = now;
