@@ -13,6 +13,7 @@ const int ZERO_PIN = 2;
 const int STEP_PIN = 10;
 const int DIR_PIN = 11;
 const int TIMING_PIN = 9;
+const int SEND_READY_PIN = 3;
 
 const int width = 320;
 
@@ -31,6 +32,7 @@ unsigned long t0;
 volatile bool pinState;
 volatile bool sendState;
 
+
 // properties
 //unsigned int pwmPeriod;
 //unsigned char clockSelectBits;
@@ -43,9 +45,10 @@ void setup() {
   pinMode(DIR_PIN, OUTPUT);
   pinMode(ZERO_PIN, INPUT_PULLUP);
   pinMode(TIMING_PIN, OUTPUT);
+  pinMode(SEND_READY_PIN, INPUT);
   
   attachInterrupt(digitalPinToInterrupt(2), zeroButton, FALLING); //RISING, FALLING, LOW
-  
+
   isCalibrated = 0;
   calibrateAngle();
   
@@ -73,25 +76,6 @@ void setup() {
 
 /*--------------------------- function definitions ---------------------------*/
 
-/*---------------- TIMER1 -------------------------*/
-/*
-void initilaizeTimer(){
-  noInterrupts();
-  TCCR1A = 0;
-  TCCR1B = 0;
-
-  TCNT1 = 34286; //PRELOAD TIMER
-  TCCR1B |= (1<<CS12); //256 prescaler
-  TIMSK1 |= (1<<TOIE1); //enable overflow interrupt
-  interrupts(); //anable all interrupts
-}
-
-ISR(TIMER1_OVF_vect){
-  TCNT1 = 34286;  
-  sendSerial();
-}
-
-*/
 
 
 
@@ -214,7 +198,7 @@ void loop() {
     
     unsigned long now = millis();
     
-    if(Serial.availableForWrite()>2 && (now-t0)>4){ // wait until 125Hz (8ms) to send
+    if(Serial.availableForWrite()>2 && (now-t0)>4 && digitalRead(SEND_READY_PIN)){ // wait until 125Hz (8ms) to send
       if(state){
         Serial.write(lowByte(steps));
         Serial.write(highByte(steps));

@@ -22,11 +22,13 @@ import matplotlib.pyplot as plt
 
 INPUT_PIN = 37
 BUZZ_PIN = 33
+SEND_READY_PIN = 31
 
 angles = []
 timestamps = []
-datalist = []
 
+startSequence = 0
+isStarted = 0
 start_time = 0
 buzz_time = 0
 buzz_state = 0
@@ -39,6 +41,9 @@ def main():
 	x_center = display_size[0]/2
 	dead_center = display_size[0]/2	
 	global start_time
+	global buzz_state
+	global buzz_time
+	global startSequence
 
 	try:	
 		detect_xcenter_conn, main_xcenter_conn = Pipe() #xcenter will be updated in the detect thread and used in main thread
@@ -50,32 +55,15 @@ def main():
 		
 		arduino.reset_output_buffer()
 		arduino.reset_input_buffer()
-		
-		
+				
 		time.sleep(10) #wait forinference to startup
-
-		start_time = time.time()
-		setupGPIO()
-
-		#buzzer start pattern
-		GPIO.output(BUZZ_PIN, 1)
-		time.sleep(0.2)
-		GPIO.output(BUZZ_PIN, 0)
-		time.sleep(0.5)
-		GPIO.output(BUZZ_PIN, 1)
-		time.sleep(0.2)
-		GPIO.output(BUZZ_PIN, 0)
-		time.sleep(0.5)
-		GPIO.output(BUZZ_PIN, 1)
-		time.sleep(0.2)
-		GPIO.output(BUZZ_PIN, 0)
-
+		
 		buzz_state = 0
 		buzz_time = 0
-	
-		time.sleep(1)
+		setupGPIO()
+		GPIO.output(SEND_READY_PIN, 1)
 		
-		GPIO.add_event_detect(INPUT_PIN, GPIO.RISING, callback=read_angle)
+		
 		
 		print("-------------TRACKING STARTED---------------")	
 		
@@ -94,17 +82,22 @@ def main():
 				else:
 					print("[main]\t xcenter out of range")	
 				
-
-			#buzz every 10s
 			now = time.time()
-			if(now-buzz_time>10): #time since last buzz
-				buzz_state = 1
-				GPIO.output(BUZZ_PIN, buzz_state)
-				buzz_time = now
-			elif(buzz_state and now-buzz_time>0.2):
-				buzz_state = 0
-				GPIO.output(BUZZ_PIN, buzz_state)
-			
+			if(startSequence and isStarted):
+				if(now-buzz_time>0.5):
+					GPIO.output(BUZZ_PIN, 0)
+					startSequence = 0
+#			else: #buzz every 10s			
+	#			now = time.time()
+	#			if(now-buzz_time>10): #time since last buzz
+	#				buzz_state = 1
+	#				GPIO.output(BUZZ_PIN, buzz_state)
+	#				buzz_time = now
+	#				print("time of buzz = ", now)
+	#			elif(buzz_state and now-buzz_time>0.2):
+	#				buzz_state = 0
+	#				GPIO.output(BUZZ_PIN, buzz_state)
+				
 				
 
 			
@@ -115,39 +108,56 @@ def main():
 	finally:
 		print("------------------EXITING-------------------")	
 		GPIO.output(BUZZ_PIN, 0)
-			
+		GPIO.output(SEND_READY_PIN, 0)	
+		GPIO.remove_event_detect(INPUT_PIN)
+	
 		arduino.reset_output_buffer()					
 		arduino.close()		
 		process_detection.join()
 				
 	#LOG angle data
-		#plot(timestamps[10:], angles[10:])
+		#diff = []
+		#last = 0
+		#for a in angles:
+		#	diff.append(a-last)
+		#	last = a
+	#clean angles data
+		global angles
+		global timestamps
+		angles = angles[5:] #cutting the first few data because buffer might not have been clean
+		timestamps = timestamps[5:]
+		for i in range(1, len(angles)):
+			if (abs(angles[i]-angles[i-1])>30):
+				angles[i] = angles[i-1] #replace the spike with the previous angle (will be as if it never changed)
+
+		plot(timestamps, angles)
 		#print("angles = ", angles)
 		#print("timestamps = ", timestamps)
 		#t0 = 0
 		for i in range(0, len(angles)):
 			print("steps: ", angles[i])#, "\tdata: ", datalist[i])
 
-	#buzzer start pattern
+	
+	#buzzer end pattern
 		GPIO.output(BUZZ_PIN, 1)
-		time.sleep(0.1)
+		time.sleep(0.05)
 		GPIO.output(BUZZ_PIN, 0)
-		time.sleep(0.1)
+		time.sleep(0.05)
 		GPIO.output(BUZZ_PIN, 1)
-		time.sleep(0.1)
+		time.sleep(0.05)
 		GPIO.output(BUZZ_PIN, 0)
-		time.sleep(0.1)
+		time.sleep(0.05)
 		GPIO.output(BUZZ_PIN, 1)
-		time.sleep(0.1)
+		time.sleep(0.05)
 		GPIO.output(BUZZ_PIN, 0)
-		time.sleep(0.1)
+		time.sleep(0.05)
 		GPIO.output(BUZZ_PIN, 1)
 		time.sleep(0.5)
 		GPIO.output(BUZZ_PIN, 0)
 		
 		
 	# cleanup all GPIOs	
-		GPIO.cleanup()  
+		cleanup_GPIO()  
 			
 		
 		
@@ -155,8 +165,13 @@ def setupGPIO():
 	GPIO.setmode(GPIO.BOARD)  # BOARD pin-numbering scheme		
 	GPIO.setup(INPUT_PIN, GPIO.IN)  # button pin set as input
 	GPIO.setup(BUZZ_PIN, GPIO.OUT, initial=GPIO.LOW)
+	GPIO.setup(SEND_READY_PIN, GPIO.OUT, initial=GPIO.LOW)
+	GPIO.add_event_detect(INPUT_PIN, GPIO.RISING, callback=read_angle)
 	
-
+def cleanup_GPIO():
+	GPIO.output(BUZZ_PIN, 0)
+	GPIO.output(SEND_READY_PIN, 0)
+	GPIO.cleanup()  
 
 def object_detection(x_center_conn):
 	net = jetson.inference.detectNet("ssd-mobilenet-v2", threshold=0.4) #ssd-mobilenet-v2
@@ -244,9 +259,22 @@ def receive_angle():
 
 def read_angle(channel):
 	now = time.time()
+	angle = read_angle_from_arduino()
+	global isStarted
+	global startSequence
+	global start_time
+	global buzz_time
+
+	if(not isStarted):		
+		global startSequence
+		isStarted = 1
+		startSequence = 1
+		start_time = now
+		buzz_time = now
+		GPIO.output(BUZZ_PIN, 1)
+	
 	timestamps.append(now-start_time)
-	#print("time: ", timestamps[-1])	
-	angles.append(read_angle_from_arduino())
+	angles.append(angle)
 	#print("angle = ", angles[-1], "\tat ", timestamps[-1])
 	
 	
