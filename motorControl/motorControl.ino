@@ -3,30 +3,37 @@
 *
 *
 */
-//TODO: fix code for target_angle, find c
+//TODO: find c
 
 #include <math.h>
+//#include "TimerOne.h"
 
-/*--------------------------------------- globla variables --------------------------------*/
+/*--------------------------------------- global variables --------------------------------*/
 const int ZERO_PIN = 2;
 const int STEP_PIN = 10;
 const int DIR_PIN = 11;
+const int TIMING_PIN = 9;
 
 const int width = 320;
 
-const float a = 0.3; //0.03
+const float a = 0.25; //0.3
 const float b = 0.005;
-const float c = 0.05; //0.2
+const float c = 0.08; //0.2
 
 volatile bool isCalibrated;
 int state;
 unsigned int xcenter;
 int dir;
-short steps;
+unsigned short steps;
 float period;
 float target_angle;
 unsigned long t0;
+volatile bool pinState;
+volatile bool sendState;
 
+// properties
+//unsigned int pwmPeriod;
+//unsigned char clockSelectBits;
 
 /*--------------------------------------- setup -----------------------------------------*/
 void setup() {
@@ -35,6 +42,7 @@ void setup() {
   pinMode(STEP_PIN, OUTPUT);
   pinMode(DIR_PIN, OUTPUT);
   pinMode(ZERO_PIN, INPUT_PULLUP);
+  pinMode(TIMING_PIN, OUTPUT);
   
   attachInterrupt(digitalPinToInterrupt(2), zeroButton, FALLING); //RISING, FALLING, LOW
   
@@ -47,16 +55,47 @@ void setup() {
   
   digitalWrite(DIR_PIN, dir);
 
-  while(Serial.available()>0){ //to clear the buffer
+  while(Serial.available()>0){ //to clear the input buffer
     Serial.read();
   }
+  //Serial.flush();
 
-  t0 = millis();
+  t0 = 0;
   Serial.print("Ready");
+  /*
+  Timer1.initialize(1000);//11111
+  Timer1.attachInterrupt(sendSerial);
+  //Timer1.start();
+  */  
+  
 }
 
 
 /*--------------------------- function definitions ---------------------------*/
+
+/*---------------- TIMER1 -------------------------*/
+/*
+void initilaizeTimer(){
+  noInterrupts();
+  TCCR1A = 0;
+  TCCR1B = 0;
+
+  TCNT1 = 34286; //PRELOAD TIMER
+  TCCR1B |= (1<<CS12); //256 prescaler
+  TIMSK1 |= (1<<TOIE1); //enable overflow interrupt
+  interrupts(); //anable all interrupts
+}
+
+ISR(TIMER1_OVF_vect){
+  TCNT1 = 34286;  
+  sendSerial();
+}
+
+*/
+
+
+
+/*----------------------AUX FNS ----------------------------*/
 int readIntFromBytes() {
   union u_tag {
     byte b[2];
@@ -98,16 +137,24 @@ void zeroButton(){
     //steps = 0;
     isCalibrated = true;  
   }
+  
+  //Timer1.start();
 }
 
-
+/*
+void sendSerial(){
+  now +=1; 
+  //digitalWrite(3, pinState);
+  //pinState = !pinState; 
+  
+}*/
 
 /*-----------------------------------main loop ------------------------------------*/
 void loop() {
   while (1) {
     float current_angle = 0.15*steps;
     
-    if(Serial.available() > 2){ //use recieved xcenter to calculate target angle
+    if(Serial.available() >= 2){ //use recieved xcenter to calculate target angle
       xcenter = readIntFromBytes();
       int deadcenter = width/2;
       int x_error = (xcenter-deadcenter);
@@ -145,7 +192,7 @@ void loop() {
     }
     else{
       if(error>30){
-        period = 150;    
+        period = 130;    
       }
       else{
         period = 1000.0/(a*error);
@@ -158,31 +205,34 @@ void loop() {
     else{
       dir = 0;  
     }
+
     
     digitalWrite(STEP_PIN, state);
     digitalWrite(DIR_PIN, dir);
-    state = !state;
+   
     updateCurrentAngle();
-
+    
+    unsigned long now = millis();
+    
+    if(Serial.availableForWrite()>2 && (now-t0)>4){ // wait until 125Hz (8ms) to send
+      if(state){
+        Serial.write(lowByte(steps));
+        Serial.write(highByte(steps));
+        
+        //Serial.write((byte)(steps>>8));
+        //Serial.write((byte)steps);
+      }
+      digitalWrite(TIMING_PIN, state);
+  
+      t0 = now;
+    }
+    state = !state;
+    
     if(period<1000){
       delayMicroseconds(period);
     }
     else{
       delay(period/1000)  ;
     }
-    unsigned long now = millis();
-
-    if(Serial.availableForWrite()>2 && (now-t0)>11){ //wait until 90Hz (11.1ms) to send
-      Serial.write(highByte(steps));
-      Serial.write(lowByte(steps));
-      t0 = now;
-    }
-
-    /*Serial.print("error: ");
-    Serial.println(error);
-    Serial.print("period: ");
-    Serial.println(period);
-    */
-    
   }
 }
