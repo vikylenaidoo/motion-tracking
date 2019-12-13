@@ -18,17 +18,27 @@ const int CALIBRATED_PIN = 3;
 
 const int width = 320;
 
-const float a = 0.25; //0.3
+const float a = 0.26; //0.3
 const float b = 0.005;
-const float c = 0.08; //0.2
+const float c = 0.1; //error gain
+const float d = 0.05;
+
+/*target = current_angle + c*x_error + d*(target_angle-prev_target_angle)/period
+*/
 
 volatile bool isCalibrated;
+volatile bool isCalibrated_Jetson;
 int state;
 unsigned int xcenter;
 int dir;
 unsigned short steps;
 float period;
+
+float prev_x_error;
+float prev_target_angle;
 float target_angle;
+unsigned long prev_target_time;
+
 unsigned long t0;
 volatile bool pinState;
 volatile bool sendState;
@@ -48,14 +58,17 @@ void setup() {
   pinMode(TIMING_PIN, OUTPUT);
   pinMode(CALIBRATED_PIN, OUTPUT);
   digitalWrite(CALIBRATED_PIN, 1);
+  digitalWrite(STEP_PIN, 0);
   
   attachInterrupt(digitalPinToInterrupt(2), zeroButton, FALLING); //RISING, FALLING, LOW
 
+  isCalibrated_Jetson = 0;
   isCalibrated = 0;
+  digitalWrite(CALIBRATED_PIN, 0);
   calibrateAngle();
   
-  period = 500; //fast ~ 2 to 3
-  target_angle = 90;
+  period = 500; 
+  target_angle = 45;
   xcenter = width/2;
   
   digitalWrite(DIR_PIN, dir);
@@ -116,7 +129,7 @@ void calibrateAngle(){
     delay(2);
   }
   steps = 0;
-  delay(2000);
+  delay(3000);
 }
 
 void zeroButton(){
@@ -124,7 +137,7 @@ void zeroButton(){
     //steps = 0;
     isCalibrated = true;  
   }
-   digitalWrite(CALIBRATED_PIN, 0);
+  // digitalWrite(CALIBRATED_PIN, 0);
   //Timer1.start();
 }
 
@@ -141,8 +154,13 @@ void loop() {
   while (1) {
     float current_angle = 0.15*steps;
     
-    if(Serial.available() >= 2){ //use recieved xcenter to calculate target angle
+    if(Serial.available() > 2){ //use recieved xcenter to calculate target angle
       xcenter = readIntFromBytes();
+      while(xcenter>width){
+        Serial.read();
+        xcenter = readIntFromBytes();
+      }
+      
       int deadcenter = width/2;
       int x_error = (xcenter-deadcenter);
       
@@ -155,36 +173,58 @@ void loop() {
       }
 
       //set target_angle
-      float target = current_angle + c*x_error; //TODO: find value of c
-      if(target<180 && target>0){
-        target_angle = target;  
+      unsigned long now = millis();
+      float target;
+      if(x_error<25){
+        target = current_angle + d*x_error;
       }
-      /*Serial.print("serial recieved: \n xcenter = ");
+      else{
+        target = current_angle + c*x_error;// - d*(x_error - prev_x_error)/(now - prev_target_time); //TODO: find value of c
+        //target = target + 0.01*(target-prev_target_angle)/(now-prev_target_time);
+      }
+      if(target<180 && target>0){
+        prev_x_error = x_error;
+        prev_target_time = now;
+        
+        target_angle = target; 
+        prev_target_angle = target_angle; 
+        
+      }
+      Serial.print("serial recieved: \n xcenter = ");
       Serial.println(xcenter);
-      Serial.print("target = ");
-      Serial.println(target_angle);
-      Serial.print("current = ");
-      Serial.println(current_angle);
-      Serial.print("x error = ");
-      Serial.println(x_error);
-      */
+      //Serial.print("target = ");
+      //Serial.println(target_angle);
+      //Serial.print("current = ");
+      //Serial.println(current_angle);
+      //Serial.print("x error = ");
+      //Serial.println(x_error);
+      
       
     }
     
     
-    
+    //set period
     float error = abs(target_angle-current_angle);
     if(error<0.15){
-      period = 50000;  
+      period = 50000; 
+      if(target_angle==45 && isCalibrated_Jetson==0){
+          isCalibrated_Jetson==1;
+          digitalWrite(CALIBRATED_PIN, 0);
+      } 
     }
     else{
-      if(error>30){
-        period = 130;    
+      if(error>25){
+        period = 20*error;//error*20-250;
       }
       else{
-        period = 1000.0/(a*error);
+        if(error>15){
+          period = 500;//250;    
+        }
+        else{
+          period = 1000.0/(0.1333*error);//1000.0/(a*error);
+        }
       }
-    }
+    
     
     if(current_angle>target_angle){
       dir = 1;  
@@ -201,24 +241,15 @@ void loop() {
     
     //unsigned long now = millis();
     
-    /*if(Serial.availableForWrite()>2 && (now-t0)>5 && digitalRead(SEND_READY_PIN)){ // wait until 125Hz (8ms) to send 
-      if(state){
-        Serial.write(lowByte(steps));
-        Serial.write(highByte(steps));
-        t0 = now;
-      }
-      digitalWrite(TIMING_PIN, state);
-  
-      //t0 = now;
-    }*/
     //digitalWrite(TIMING_PIN, state);
     state = !state;
+    }
     
     if(period<1000){
       delayMicroseconds(period);
     }
     else{
-      delay(period/1000)  ;
+      delay(period/1000) ;
     }
   }
 }

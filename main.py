@@ -28,6 +28,8 @@ ZERO_PIN = 29
 angles = []
 timestamps = []
 steps = []
+sent_times = []
+theta_list = []
 
 startSequence = 0
 isStarted = 0
@@ -49,6 +51,7 @@ def main():
 	global buzz_state
 	global buzz_time
 	global startSequence
+	global steps
 
 	try:
 		#process_angle = Process(target=start_angle)	
@@ -59,6 +62,8 @@ def main():
 		arduino.reset_output_buffer()
 		#arduino.reset_input_buffer()		
 		
+		time.sleep(10)
+
 		detect_xcenter_conn, main_xcenter_conn = Pipe() #xcenter will be updated in the detect thread and used in main thread
 		
 		#inference process
@@ -74,18 +79,23 @@ def main():
 		
 		print("-------------TRACKING STARTED---------------")	
 		
-		#last_time = time.time()
+		last_time = time.time()
 
 		while(1):
-			
-			if(main_xcenter_conn.poll(0.01)):
-				#t1 = time.time()
-				#print("[main]\t sending fps = ", 1/(t1-last_time))
-				#last_time = t1
+			if(main_xcenter_conn.poll(0.1)):
+				t1 = time.time()
+				print("[main]\t sending fps = ", 1/(t1-last_time))
+				last_time = t1
 				x_center = main_xcenter_conn.recv()		
-				print("[main]\t xcenter = ", x_center)		
+				#print("[main]\t xcenter = ", x_center)		
 				if(x_center<display_size[0] and x_center>0):
-					send_to_arduino(int(x_center))				
+					send_to_arduino(int(x_center))
+					sent_times.append(time.time())	
+					x_error = x_center-160
+					if(x_error<25):
+						theta_list.append(steps[-1]*0.15 + 0.05*(x_error))			
+					else:	
+						theta_list.append(steps[-1]*0.15 + 0.1*(x_error))			
 				else:
 					print("[main]\t xcenter out of range")	
 				
@@ -128,7 +138,7 @@ def main():
 		#	diff.append(a-last)
 		#	last = a
 	#clean angles data
-		global steps
+		#global steps
 		global timestamps
 		
 
@@ -136,14 +146,32 @@ def main():
 		#for i in range(1, len(angles)):
 		#	if (abs(angles[i]-angles[i-1])>30):
 		#		angles[i] = angles[i-1] #replace the spike with the previous angle (will be as if it never changed)
-		
+
+		freq = []
+		last_t = 0
+		times = []		
+
 		for s in steps:
 			angles.append(0.15*s)
 		
-		for t in timestamps:
-			t = t-start_time		
+		for t in timestamps:			
+			t = t-start_time
+			times.append(t)
+			try:		
+				freq.append((t-last_t))
+			except:
+				freq.append(0)
+			last_t = t
+			
 
-		plot(timestamps, angles)
+		for t in sent_times:
+			t = t-sent_times[0]		
+
+		
+		plt.plot(times, steps)
+#		plt.plot(timestamps, freq)
+		#plt.plot(sent_times, theta_list)
+		plt.show()
 		#print("angles = ", angles)
 		#print("timestamps = ", timestamps)
 		#t0 = 0
@@ -239,7 +267,7 @@ def read_angle(channel):
 		steps.append(steps[-1]-1)
 	else:
 		steps.append(steps[-1]+1)
-
+	
 	
 	
 
@@ -266,13 +294,13 @@ def zero_button(channel):
 	if(not isStarted): 		
 		start_time = now
 		buzz_time = now
-		GPIO.output(BUZZ_PIN, 1) 
-		time.sleep(0.5)	
-		GPIO.output(BUZZ_PIN, 0) 
-		steps.append(0)
+		GPIO.output(BUZZ_PIN, 1)  
+		steps.append(300)
 		timestamps.append(now)
 		isStarted = 1
 		GPIO.add_event_detect(STEP_PIN, GPIO.RISING, callback=read_angle)
+		time.sleep(0.5)	
+		GPIO.output(BUZZ_PIN, 0)
 
 	print("------------------ CALIBRATED ----------------------")
 	
