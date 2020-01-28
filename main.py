@@ -51,7 +51,7 @@ def main():
 		setupGPIO()		
 	
 		uart.reset_output_buffer()
-		
+		uart.reset_input_buffer()
 		
 		time.sleep(10)
 
@@ -68,9 +68,10 @@ def main():
 		print("-------------TRACKING STARTED---------------")	
 		
 		last_time = time.time()
-
+		
+		uart.reset_input_buffer() #should beep here?
 		while(1): #this loop sends and receives data from the uart
-			if(main_xcenter_conn.poll(0.1)):
+			if(main_xcenter_conn.poll(0.01)):
 				t1 = time.time()
 				print("[main]\t sending fps = ", 1/(t1-last_time))
 				last_time = t1
@@ -81,8 +82,9 @@ def main():
 					#sent_times.append(time.time())	
 				else:
 					print("[main]\t xcenter out of range")	
-				
-				
+			
+			if(uart.in_waiting>=6):
+				read_from_uart()
 
 			
 								
@@ -94,7 +96,11 @@ def main():
 		#GPIO.output(BUZZ_PIN, 0)
 		#GPIO.remove_event_detect(STEP_PIN)
 	
-		uart.reset_output_buffer()					
+		while(uart.in_waiting>=6):
+			read_from_uart		
+
+		uart.reset_output_buffer()	
+		uart.reset_input_buffer()				
 		uart.close()		
 		process_detection.join()
 		
@@ -170,9 +176,13 @@ def send_to_uart(xcenter):
 
 
 def read_from_uart(): #should receive steps(2bytes) + microsecnds(4bytes) = 6 bytes
-	data = uart.read(2)	#highbyte then lowbyte
-
+	step_data = uart.read(2)	
+	time_data = uart.read(4)
 	
+	steps.append(int.from_bytes(step_data, byteorder='little'))
+	microseconds.append(int.from_bytes(time_data, byteorder='little'))
+	print("received steps = ", steps[-1])
+	print("received useconds = ", microseconds[-1])
 
 def plot(x_values, y_values):
 	plt.plot(x_values, y_values)
