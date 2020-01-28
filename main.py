@@ -69,7 +69,7 @@ def main():
 		
 		last_time = time.time()
 		
-		uart.reset_input_buffer() #should beep here?
+		uart.reset_input_buffer() #should beep here or beep in the stm via a manual time reset btn?
 		while(1): #this loop sends and receives data from the uart
 			if(main_xcenter_conn.poll(0.01)):
 				t1 = time.time()
@@ -96,13 +96,20 @@ def main():
 		#GPIO.output(BUZZ_PIN, 0)
 		#GPIO.remove_event_detect(STEP_PIN)
 	
-		while(uart.in_waiting>=6):
-			read_from_uart		
+		while(uart.in_waiting>6):
+			read_from_uart	
+	
+		print("\n-------------- uart reading complete ----------------------")
+	
+		
 
 		uart.reset_output_buffer()	
 		uart.reset_input_buffer()				
 		uart.close()		
 		process_detection.join()
+		
+		for i in range(0, len(steps)):
+			print("steps = ", steps[i], " \ttime = ", microseconds[i], "  @ ", 500000/(microseconds[i]-microseconds[i-1]), " Hz")
 		
 
 		

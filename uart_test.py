@@ -2,7 +2,7 @@
 import serial
 import time
 
-x = 300
+x = 100
 
 
 
@@ -12,25 +12,26 @@ def main():
 	uart.reset_input_buffer()	
 
 	try:
-		while(1):
-			#time.sleep(4)
-			#global x
-			#x = x+1
-			#tx_data = x.to_bytes(2, byteorder='big', signed=False)
-			#uart.write(tx_data)
-			#print("tx_data: ", x)
-			#print("outwaiting: ", uart.out_waiting)
-
-			if(uart.in_waiting>=6):
-				step_data = uart.read(2)	
-				time_data = uart.read(4)
-				
-				steps = (int.from_bytes(step_data, byteorder='little'))
-				microseconds = (int.from_bytes(time_data, byteorder='little'))
-				print("received steps = ", steps, " = ", step_data)
-				print("received useconds = ", microseconds, " = ", time_data)			
+		global x
+		while(x<160):
+			time.sleep(15)
 			
+			x = x+10
+			tx_data = x.to_bytes(2, byteorder='big', signed=False)
+			uart.write(tx_data)
+			print("tx_data: ", x)
+			print("outwaiting: ", uart.out_waiting)
 
+#			if(uart.in_waiting>=6):
+#				step_data = uart.read(2)	
+#				time_data = uart.read(4)
+				
+#				steps = (int.from_bytes(step_data, byteorder='little'))
+#				microseconds = (int.from_bytes(time_data, byteorder='little'))
+#				print("received steps = ", steps, " = ", step_data)
+#				print("received useconds = ", microseconds, " = ", time_data)			
+			
+		print("end")
 
 	except KeyboardInterrupt:
 		print("exiting")
