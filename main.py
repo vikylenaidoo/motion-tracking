@@ -21,15 +21,14 @@ import matplotlib.pyplot as plt
 
 
 
+#------------------------------------- global variables ---------------------------
 
-microseconds = []
-steps = []
+microseconds = [] 
+#holds all the timestamps received from uart. 
+#NOTE: each unit is 2 microseconds not 1 since the counter freq of the stm32 is 500kHz not 1MHz due to some issue I couldnt get the timer (TIM16) to 1MHz. total runtime before timestasmps overflow is ~ 240min
 
-startSequence = 0
-isStarted = 0
-start_time = 0
-buzz_time = 0
-buzz_state = 0
+steps = [] 
+# holds the received steps receioved from thr uaurt at the correspomding timestamp
 
 
 
@@ -69,7 +68,7 @@ def main():
 		
 		last_time = time.time()
 		
-		uart.reset_input_buffer() #should beep here or beep in the stm via a manual time reset btn?
+		uart.reset_input_buffer() #should beep here, or beep in the stm via a manual time reset btn? beeping corresponds to timestamp reset to zero
 		while(1): #this loop sends and receives data from the uart
 			if(main_xcenter_conn.poll(0.01)):
 				t1 = time.time()
@@ -96,6 +95,7 @@ def main():
 		#GPIO.output(BUZZ_PIN, 0)
 		#GPIO.remove_event_detect(STEP_PIN)
 	
+		#finish reading all the data from uart input buffer
 		while(uart.in_waiting>6):
 			read_from_uart	
 	
@@ -108,6 +108,7 @@ def main():
 		uart.close()		
 		process_detection.join()
 		
+		#print the data
 		for i in range(0, len(steps)):
 			print("steps = ", steps[i], " \ttime = ", microseconds[i], "  @ ", 500000/(microseconds[i]-microseconds[i-1]), " Hz")
 		
@@ -121,14 +122,9 @@ def main():
 		
 def setupGPIO():
 	GPIO.setmode(GPIO.BOARD)  # BOARD pin-numbering scheme		
-	#GPIO.setup(STEP_PIN, GPIO.IN)  # button pin set as input
-	#GPIO.setup(BUZZ_PIN, GPIO.OUT, initial=GPIO.LOW)
-	#GPIO.setup(DIR_PIN, GPIO.IN)
-	#GPIO.setup(ZERO_PIN, GPIO.IN) # pull_up_down=GPIO.PUD_UP
-	#GPIO.add_event_detect(ZERO_PIN, GPIO.FALLING, callback=zero_button)
+	
 	
 def cleanup_GPIO():
-	#GPIO.output(BUZZ_PIN, 0)
 	GPIO.cleanup()  
 
 def object_detection(x_center_conn):
